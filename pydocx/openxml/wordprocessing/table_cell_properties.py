@@ -13,6 +13,8 @@ class TableCellProperties(XmlModel):
 
     grid_span = XmlChild(name='gridSpan', attrname='val')
 
+    background_fill = XmlChild(name='shd', attrname='fill')
+
     vertical_merge = XmlChild(name='vMerge', type=lambda el: dict(el.attrib))  # noqa
 
     def should_close_previous_vertical_merge(self):
@@ -29,3 +31,13 @@ class TableCellProperties(XmlModel):
             return False
         merge = self.vertical_merge.get('val', 'continue')
         return merge == 'continue'
+
+    @property
+    def background_color(self):
+        background_fill = getattr(self, 'background_fill', None)
+
+        # There is no need to set white background color
+        if background_fill not in ('auto', 'FFFFFF'):
+            return background_fill
+
+        return None
