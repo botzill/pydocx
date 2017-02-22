@@ -4,7 +4,7 @@ from __future__ import (
     print_function,
     unicode_literals,
 )
-from pydocx.util.memoize import memoized
+
 from pydocx.models import XmlModel, XmlCollection, XmlChild
 from pydocx.openxml.wordprocessing.hyperlink import Hyperlink
 from pydocx.openxml.wordprocessing.paragraph_properties import ParagraphProperties  # noqa
@@ -17,6 +17,7 @@ from pydocx.openxml.wordprocessing.deleted_run import DeletedRun
 from pydocx.openxml.wordprocessing.sdt_run import SdtRun
 from pydocx.openxml.wordprocessing.simple_field import SimpleField
 from pydocx.openxml.wordprocessing.bookmark import Bookmark
+from pydocx.util.memoize import memoized
 
 
 class Paragraph(XmlModel):
@@ -38,6 +39,20 @@ class Paragraph(XmlModel):
     def __init__(self, **kwargs):
         super(Paragraph, self).__init__(**kwargs)
         self._effective_properties = None
+
+    @property
+    def is_empty(self):
+        if not self.children:
+            return True
+
+        # we may have cases when a paragraph has a Bookmark with name '_GoBack'
+        # and we should treat it as empty paragraph
+        if len(self.children) == 1 and \
+                isinstance(self.children[0], Bookmark) and \
+                        self.children[0].name in ('_GoBack',):
+            return True
+
+        return False
 
     @property
     def effective_properties(self):
@@ -206,3 +221,45 @@ class Paragraph(XmlModel):
                 ind = level.paragraph_properties.to_int(indentation, default=0)
 
         return ind
+
+    def get_spacing(self):
+        """Get paragraph spacing according to:
+                ECMA-376, 3rd Edition (June, 2011),
+                Fundamentals and Markup Language Reference § 17.3.1.33.
+
+            Note: Partial implementation for now.
+        """
+        results = {
+            'line': None,
+            'after': None
+        }
+
+        default_properties_spacing = self.default_doc_styles.paragraph.properties
+        no_spacing_properties = not self.properties or self.properties.no_spacing
+
+        if not default_properties_spacing and no_spacing_properties:
+            return results
+
+        if no_spacing_properties:
+            properties = default_properties_spacing
+        else:
+            properties = self.properties
+
+        spacing_line = properties.to_int('spacing_line')
+        spacing_after = properties.to_int('spacing_after')
+
+        if default_properties_spacing and spacing_line is None \
+                and bool(properties.spacing_after_auto_spacing):
+            # get the spacing_line from the default definition
+            spacing_line = default_properties_spacing.to_int('spacing_line')
+
+        if spacing_line:
+            line = spacing_line / 240.0
+            # default line spacing is 1 so no need to add attribute
+            if line != 1.0:
+                results['line'] = line
+
+        if spacing_after is not None:
+            results['after'] = spacing_after
+
+        return results

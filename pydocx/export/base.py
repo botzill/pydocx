@@ -310,10 +310,7 @@ class PyDocXExporter(object):
             yield child
 
     def get_paragraph_styles_to_apply(self, paragraph):
-        properties = paragraph.effective_properties
         property_rules = [
-            (properties.justification, self.export_paragraph_property_justification),
-            (True, self.export_paragraph_property_indentation),
         ]
         for actual_value, handler in property_rules:
             if actual_value:
