@@ -7,14 +7,16 @@ from __future__ import (
 
 from collections import defaultdict
 
-from pydocx.models import XmlCollection, XmlModel
+from pydocx.models import XmlCollection, XmlModel, XmlChild
 from pydocx.openxml.wordprocessing.style import Style
+from pydocx.openxml.wordprocessing.doc_defaults import DocDefaults
 
 
 class Styles(XmlModel):
     XML_TAG = 'styles'
 
     styles = XmlCollection(Style)
+    doc_defaults = XmlChild(type=DocDefaults)
 
     def __init__(self, styles=None, *args, **kwargs):
         super(Styles, self).__init__(styles=styles, *args, **kwargs)

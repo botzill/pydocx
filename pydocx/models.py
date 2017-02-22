@@ -413,3 +413,11 @@ class XmlModel(object):
 
         # Create a new instance using the values we've calculated
         return cls(**kwargs)
+
+    @property
+    def default_doc_styles(self):
+        part = getattr(self.container, 'style_definitions_part', None)
+        if part:
+            return part.styles.doc_defaults
+
+        return None

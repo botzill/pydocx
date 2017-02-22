@@ -9,6 +9,7 @@ from pydocx.models import XmlModel, XmlChild
 from pydocx.openxml.wordprocessing.numbering_properties import NumberingProperties  # noqa
 from pydocx.openxml.wordprocessing.border_properties import ParagraphBorders
 from pydocx.openxml.wordprocessing.shading_properties import ParagraphShading
+from pydocx.types import OnOff
 
 
 class ParagraphProperties(XmlModel):
@@ -28,6 +29,12 @@ class ParagraphProperties(XmlModel):
     indentation_right = XmlChild(name='ind', attrname='right')
     indentation_first_line = XmlChild(name='ind', attrname='firstLine')
     indentation_hanging = XmlChild(name='ind', attrname='hanging')
+
+    # paragraph spacing
+    spacing_after = XmlChild(name='spacing', attrname='after')
+    spacing_line = XmlChild(name='spacing', attrname='line')
+    spacing_line_rule = XmlChild(name='spacing', attrname='lineRule')
+    spacing_after_auto_spacing = XmlChild(type=OnOff, name='spacing', attrname='afterAutospacing')
 
     @property
     def start_margin_position(self):
@@ -55,3 +62,25 @@ class ParagraphProperties(XmlModel):
             return int(getattr(self, attribute, default))
         except (ValueError, TypeError):
             return default
+
+    @property
+    def is_list_paragraph(self):
+        return self.parent_style == 'ListParagraph'
+
+    @property
+    def no_indentation(self):
+        return not any((
+            self.indentation_left,
+            self.indentation_hanging,
+            self.indentation_right,
+            self.indentation_first_line,
+        ))
+
+    @property
+    def no_spacing(self):
+        return not any((
+            self.spacing_line,
+            self.spacing_after,
+            self.spacing_after_auto_spacing,
+            self.spacing_line_rule,
+        ))

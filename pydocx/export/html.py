@@ -17,7 +17,8 @@ from pydocx.constants import (
     POINTS_PER_EM,
     PYDOCX_STYLES,
     TWIPS_PER_POINT,
-    EMUS_PER_PIXEL
+    EMUS_PER_PIXEL,
+    HTML_WHITE_SPACE
 )
 from pydocx.export.base import PyDocXExporter
 from pydocx.export.numbering_span import NumberingItem
@@ -26,8 +27,7 @@ from pydocx.util.uri import uri_is_external
 from pydocx.util.xml import convert_dictionary_to_style_fragment
 from pydocx.export.html_tag import (
     HtmlTag,
-    is_only_whitespace,
-    is_not_empty_and_not_only_whitespace
+    is_only_whitespace
 )
 
 
@@ -80,6 +80,10 @@ class PyDocXHTMLExporter(PyDocXExporter):
         styles = {
             'body': {
                 'margin': '0px auto',
+            },
+            'p': {
+                'margin-top': '0px',
+                'margin-bottom': '0px'
             }
         }
 
@@ -150,17 +154,15 @@ class PyDocXHTMLExporter(PyDocXExporter):
         return tag.apply(results, allow_empty=False)
 
     def get_paragraph_tag(self, paragraph):
+        if paragraph.is_empty:
+            return HtmlTag('p', custom_text=HTML_WHITE_SPACE)
+
         heading_style = paragraph.heading_style
         if heading_style:
             tag = self.get_heading_tag(paragraph)
             if tag:
                 return tag
-        if self.in_table_cell:
-            return
-        if paragraph.has_structured_document_parent():
-            return
-        if isinstance(paragraph.parent, NumberingItem):
-            return
+
         return HtmlTag('p')
 
     def get_heading_tag(self, paragraph):
@@ -185,15 +187,11 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
     def export_paragraph(self, paragraph):
         results = super(PyDocXHTMLExporter, self).export_paragraph(paragraph)
-        results = is_not_empty_and_not_only_whitespace(results)
-
-        # TODO@botzill In PR#234 we render empty paragraphs properly so
-        # we don't need this check anymore. Adding for now and to be removed when merging
-        if results is None and not paragraph.has_border_properties:
-            return
 
         tag = self.get_paragraph_tag(paragraph)
         if tag:
+            attrs = self.get_paragraph_styles(paragraph)
+            tag.attrs = attrs
             results = tag.apply(results)
 
         for result in self.border_and_shading_builder.export_borders(
@@ -203,9 +201,21 @@ class PyDocXHTMLExporter(PyDocXExporter):
     def export_paragraph_property_justification(self, paragraph, results):
         # TODO these classes could be applied on the paragraph, and not as
         # inline spans
-        alignment = paragraph.effective_properties.justification
         # TODO These alignment values are for traditional conformance. Strict
         # conformance uses different values
+        attrs = self.get_paragraph_property_justification(paragraph)
+        if attrs:
+            tag = HtmlTag('span', **attrs)
+            results = tag.apply(results, allow_empty=False)
+        return results
+
+    def get_paragraph_property_justification(self, paragraph):
+        attrs = {}
+        if not paragraph.effective_properties:
+            return attrs
+
+        alignment = paragraph.effective_properties.justification
+
         if alignment in [JUSTIFY_LEFT, JUSTIFY_CENTER, JUSTIFY_RIGHT]:
             pydocx_class = 'pydocx-{alignment}'.format(
                 alignment=alignment,
@@ -213,42 +223,105 @@ class PyDocXHTMLExporter(PyDocXExporter):
             attrs = {
                 'class': pydocx_class,
             }
-            tag = HtmlTag('span', **attrs)
-            results = tag.apply(results, allow_empty=False)
         elif alignment is not None:
             # TODO What if alignment is something else?
             pass
-        return results
+
+        return attrs
 
     def export_paragraph_property_indentation(self, paragraph, results):
         # TODO these classes should be applied on the paragraph, and not as
         # inline styles
 
-        properties = paragraph.effective_properties
+        attrs = self.get_paragraph_property_indentation(paragraph)
 
+        if attrs:
+            tag = HtmlTag('span', **attrs)
+            results = tag.apply(results, allow_empty=False)
+
+        return results
+
+    def get_paragraph_property_spacing(self, paragraph):
         style = {}
 
-        # Numbering properties can define a text indentation on a paragraph
-        if properties.numbering_properties:
-            indentation_left = None
-            indentation_first_line = None
+        spacing = paragraph.get_spacing()
 
-            paragraph_num_level = paragraph.get_numbering_level()
+        if spacing['line']:
+            style['line-height'] = '%s%%' % (spacing['line'] * 100)
+        if spacing['after']:
+            style['margin-bottom'] = '{0:.2f}em'.format(convert_twips_to_ems(spacing['after']))
+        if style:
+            style = {
+                'style': convert_dictionary_to_style_fragment(style)
+            }
 
-            if paragraph_num_level:
-                listing_style = self.export_listing_paragraph_property_indentation(
-                    paragraph,
-                    paragraph_num_level.paragraph_properties,
-                    include_text_indent=True
+        return style
+
+    def get_paragraph_property_indentation(self, paragraph):
+        style = {}
+        attrs = {}
+        properties = paragraph.effective_properties
+
+        indentation_right = None
+        indentation_left = 0
+        indentation_first_line = None
+        span_paragraph_properties = None
+        span_indentation_left = 0
+
+        try:
+            if isinstance(paragraph.parent, NumberingItem):
+                span_paragraph_properties = paragraph.parent.numbering_span.numbering_level.\
+                    paragraph_properties
+                span_indentation_left = span_paragraph_properties.to_int(
+                    'indentation_left',
+                    default=0
                 )
-                if 'text-indent' in listing_style and listing_style['text-indent'] != '0.00em':
-                    style['text-indent'] = listing_style['text-indent']
-                    style['display'] = 'inline-block'
-        else:
-            indentation_left = properties.to_int('indentation_left')
-            indentation_first_line = properties.to_int('indentation_first_line')
+                span_indentation_hanging = span_paragraph_properties.to_int(
+                    'indentation_hanging',
+                    default=0
+                )
+                if span_paragraph_properties:
+                    indentation_left -= (span_indentation_left - span_indentation_hanging)
 
-        indentation_right = properties.to_int('indentation_right')
+        except AttributeError:
+            pass
+
+        if properties:
+            indentation_right = properties.to_int('indentation_right')
+
+            if properties.numbering_properties is None:
+                # For paragraph inside list we need to properly adjust indentations
+                # by recalculating their indentations based on the parent span
+                indentation_left = properties.to_int('indentation_left', default=0)
+                indentation_first_line = properties.to_int('indentation_first_line', default=0)
+
+                if isinstance(paragraph.parent, NumberingItem):
+                    if properties.is_list_paragraph and properties.no_indentation:
+                        indentation_left = 0
+                    elif span_paragraph_properties:
+                        indentation_left -= span_indentation_left
+                        # In this case we don't need to set text-indent separately because
+                        # it's part of the left margin
+                        indentation_left += indentation_first_line
+                        indentation_first_line = None
+                    else:
+                        # TODO Here we may encounter fake lists and not always margins are
+                        # set properly.
+                        pass
+            else:
+                indentation_left = None
+                indentation_first_line = None
+                paragraph_num_level = paragraph.get_numbering_level()
+
+                if paragraph_num_level:
+                    listing_style = self.export_listing_paragraph_property_indentation(
+                        paragraph,
+                        paragraph_num_level.paragraph_properties,
+                        include_text_indent=True
+                    )
+                    if 'text-indent' in listing_style and \
+                                    listing_style['text-indent'] != '0.00em':
+                        style['text-indent'] = listing_style['text-indent']
 
         if indentation_right:
             right = convert_twips_to_ems(indentation_right)
@@ -261,16 +334,34 @@ class PyDocXHTMLExporter(PyDocXExporter):
         if indentation_first_line:
             first_line = convert_twips_to_ems(indentation_first_line)
             style['text-indent'] = '{0:.2f}em'.format(first_line)
-            style['display'] = 'inline-block'
 
         if style:
             attrs = {
                 'style': convert_dictionary_to_style_fragment(style)
             }
-            tag = HtmlTag('span', **attrs)
-            results = tag.apply(results, allow_empty=False)
 
-        return results
+        return attrs
+
+    def get_paragraph_styles(self, paragraph):
+        attributes = {}
+
+        property_rules = [
+            (True, self.get_paragraph_property_justification),
+            (True, self.get_paragraph_property_indentation),
+            (True, self.get_paragraph_property_spacing),
+        ]
+        for actual_value, handler in property_rules:
+            if actual_value:
+                handler_results = handler(paragraph)
+                for attr_name in ['style', 'class']:
+                    new_value = handler_results.get(attr_name, '')
+                    if new_value:
+                        if attr_name in attributes:
+                            attributes[attr_name] += ';%s' % new_value
+                        else:
+                            attributes[attr_name] = '%s' % new_value
+
+        return attributes
 
     def export_listing_paragraph_property_indentation(
             self,
@@ -347,7 +438,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
             margin_left = convert_twips_to_ems(margin_left)
             style['margin-left'] = '{0:.2f}em'.format(margin_left)
 
-        # we don't allow negative hanging
+        # We don't allow negative hanging
         if hanging < 0:
             hanging = 0
 
@@ -592,9 +683,10 @@ class PyDocXHTMLExporter(PyDocXExporter):
             tag = HtmlTag('td', **attrs)
 
         numbering_spans = self.yield_numbering_spans(table_cell.children)
-        results = self.yield_nested_with_line_breaks_between_paragraphs(
+
+        results = self.yield_nested(
             numbering_spans,
-            self.export_node,
+            self.export_node
         )
         if tag:
             results = tag.apply(results)
@@ -740,19 +832,16 @@ class PyDocXHTMLExporter(PyDocXExporter):
         return tag.apply(results)
 
     def export_numbering_item(self, numbering_item):
-        results = self.yield_nested_with_line_breaks_between_paragraphs(
-            numbering_item.children,
-            self.export_node,
-        )
+        results = super(PyDocXHTMLExporter, self).export_numbering_item(numbering_item)
 
         style = None
 
         if numbering_item.children:
-            level_properties = numbering_item.numbering_span.\
+            level_properties = numbering_item.numbering_span. \
                 numbering_level.paragraph_properties
             # get the first paragraph properties which will contain information
             # on how to properly indent listing item
-            paragraph = numbering_item.children[0]
+            paragraph = numbering_item.get_first_child()
 
             style = self.export_listing_paragraph_property_indentation(paragraph,
                                                                        level_properties)
