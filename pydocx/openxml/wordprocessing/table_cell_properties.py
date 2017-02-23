@@ -6,6 +6,7 @@ from __future__ import (
 )
 
 from pydocx.models import XmlModel, XmlChild
+from pydocx.constants import COLOR_FOR_DARK_BACKGROUND
 
 
 class TableCellProperties(XmlModel):
@@ -34,10 +35,8 @@ class TableCellProperties(XmlModel):
 
     @property
     def background_color(self):
-        background_fill = getattr(self, 'background_fill', None)
-
         # There is no need to set white background color
-        if background_fill not in ('auto', 'FFFFFF'):
-            return background_fill
+        if self.background_fill not in ('auto', COLOR_FOR_DARK_BACKGROUND):
+            return self.background_fill
 
         return None
