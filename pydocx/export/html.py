@@ -661,6 +661,17 @@ class PyDocXHTMLExporter(PyDocXExporter):
         tag = HtmlTag('span', **attrs)
         return self.export_run_property(tag, run, results)
 
+    def export_run_property_highlight_color(self, run, results):
+        if run.properties is None or run.properties.highlight_color is None:
+            return results
+
+        attrs = {
+            'style': 'background-color: %s' % run.properties.highlight_color
+        }
+        tag = HtmlTag('span', **attrs)
+
+        return self.export_run_property(tag, run, results)
+
     def export_run_property_parent_background_color(self, run, results):
         background_color = None
 

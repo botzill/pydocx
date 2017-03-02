@@ -306,13 +306,21 @@ class TableWithCellBackgroundColor(TranslationTestCase):
     expected_output = '''
         <table border="1">
             <tr>
-                <td style="background-color: #FF00FF">AAA</td>
-                <td>BBB</td>
+                <td style="background-color: #FF00FF">
+                    <p>AAA</p>
+                </td>
+                <td>
+                    <p>BBB</p>
+                </td>
             </tr>
             <tr>
-                <td>CCC</td>
+                <td>
+                    <p>CCC</p>
+                </td>
                 <td style="background-color: #000000">
-                    <span style="color: #FFFFFF">DDD</span>
+                    <p>
+                        <span style="color: #FFFFFF">DDD</span>
+                    </p>
                 </td>
             </tr>
         </table>
