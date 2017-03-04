@@ -8,6 +8,7 @@ from __future__ import (
 from pydocx.models import XmlModel, XmlChild
 from pydocx.types import OnOff, Underline
 from pydocx.openxml.wordprocessing.rfonts import RFonts
+from pydocx.openxml.wordprocessing.border_properties import RunBorders
 
 
 class RunProperties(XmlModel):
@@ -28,6 +29,7 @@ class RunProperties(XmlModel):
     sz = XmlChild(name='sz', attrname='val')
     clr = XmlChild(name='color', attrname='val')
     r_fonts = XmlChild(type=RFonts)
+    border_properties = XmlChild(type=RunBorders)
 
     @property
     def color(self):

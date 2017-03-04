@@ -32,6 +32,8 @@ class PyDocXExporter(object):
 
         self.captured_runs = None
         self.complex_field_runs = []
+        self.current_border_item = {}
+        self.last_paragraph = None
 
         self.node_type_to_export_func_map = {
             wordprocessing.Document: self.export_document,
@@ -299,6 +301,9 @@ class PyDocXExporter(object):
         return self.yield_numbering_spans(body.children)
 
     def export_paragraph(self, paragraph):
+        if self.first_pass:
+            self.last_paragraph = paragraph
+
         children = self.yield_paragraph_children(paragraph)
         results = self.yield_nested(children, self.export_node)
         if paragraph.effective_properties:

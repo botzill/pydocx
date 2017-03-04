@@ -63,11 +63,28 @@ class DocxBuilder(object):
         )
 
     @classmethod
+    def xml_borders(cls, border_dict):
+        borders = []
+        if border_dict:
+            # Create xml for border properties
+            border_xml = '<w:{border_name} {border_attrs} />'
+            for border_name, border_attributes in border_dict.items():
+                border_attrs = ' '.join(('w:%s="%s"' %
+                                         (key, val) for key, val in border_attributes.items()))
+                borders.append(
+                    border_xml.format(border_name=border_name, border_attrs=border_attrs))
+
+            borders = '\n'.join(borders)
+
+        return borders or None
+
+    @classmethod
     def p_tag(
             self,
             text,
             style='style0',
             jc=None,
+            borders=None
     ):
         if isinstance(text, string_types):
             # Use create a single r tag based on the text and the bold
@@ -86,6 +103,7 @@ class DocxBuilder(object):
             run_tags=run_tags,
             style=style,
             jc=jc,
+            borders=self.xml_borders(borders)
         )
 
     @classmethod
@@ -103,18 +121,19 @@ class DocxBuilder(object):
             self,
             elements,
             rpr=None,
+            borders=None
     ):
         template = env.get_template(templates['r'])
         if rpr is None:
-            rpr = DocxBuilder.rpr_tag()
+            rpr = DocxBuilder.rpr_tag(borders=self.xml_borders(borders))
         return template_render(
             template,
             elements=elements,
-            rpr=rpr,
+            rpr=rpr
         )
 
     @classmethod
-    def rpr_tag(self, inline_styles=None, *args, **kwargs):
+    def rpr_tag(self, inline_styles=None, borders=None, *args, **kwargs):
         if inline_styles is None:
             inline_styles = {}
         valid_styles = (
@@ -136,6 +155,7 @@ class DocxBuilder(object):
         return template_render(
             template,
             tags=inline_styles,
+            borders=borders
         )
 
     @classmethod

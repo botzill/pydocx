@@ -274,19 +274,138 @@ class PyDocXHTMLExporter(PyDocXExporter):
             return HtmlTag(tag, id=paragraph.bookmark_name)
         return HtmlTag(tag)
 
+    def export_run(self, run):
+        results = super(PyDocXHTMLExporter, self).export_run(run)
+
+        for result in self.export_borders(run, results, tag_name='span'):
+            yield result
+
     def export_paragraph(self, paragraph):
         results = super(PyDocXHTMLExporter, self).export_paragraph(paragraph)
 
         results = is_not_empty_and_not_only_whitespace(results)
-        if results is None:
+
+        # TODO@botzill In PR#234 we render empty paragraphs properly so
+        # we don't need this check anymore. Adding for now and to be removed when merging
+        if results is None and not paragraph.has_border_properties:
             return
 
         tag = self.get_paragraph_tag(paragraph)
         if tag:
             results = tag.apply(results)
 
+        for tag in self.export_borders(paragraph, results, tag_name='div'):
+            yield tag
+
+    def export_close_paragraph_border(self):
+        if self.current_border_item.get('Paragraph'):
+            yield HtmlTag('div', closed=True)
+            self.current_border_item['Paragraph'] = None
+
+    def export_borders(self, item, results, tag_name='div'):
+        if self.first_pass:
+            for result in results:
+                yield result
+            return
+
+        # For now we have here Paragraph and Run
+        item_name = item.__class__.__name__
+        item_is_run = isinstance(item, wordprocessing.Run)
+        item_is_paragraph = isinstance(item, wordprocessing.Paragraph)
+
+        prev_borders_properties = None
+        border_properties = None
+        current_border_item = self.current_border_item.get(item_name)
+        if current_border_item:
+            prev_borders_properties = current_border_item.\
+                effective_properties.border_properties
+
+        last_item = False
+        close_border = True
+
+        def current_item_is_last_child(children, child_type):
+            for p_child in reversed(children):
+                if isinstance(p_child, child_type):
+                    return p_child == item
+            return False
+
+        def is_last_item():
+            if item_is_paragraph:
+                if isinstance(item.parent, wordprocessing.TableCell):
+                    return current_item_is_last_child(
+                        item.parent.children, wordprocessing.Paragraph)
+                elif item == self.last_paragraph:
+                    return True
+            elif item_is_run:
+                # Check if current item is the last Run item from paragraph children
+                return current_item_is_last_child(item.parent.children, wordprocessing.Run)
+
+            return False
+
+        if item.effective_properties:
+            border_properties = item.effective_properties.border_properties
+            if border_properties:
+                last_item = is_last_item()
+                close_border = False
+                run_has_different_parent = False
+
+                # If run is from different paragraph then we may need to draw separate border
+                # even if border properties are the same
+                if item_is_run and current_border_item:
+                    if current_border_item.parent != item.parent:
+                        run_has_different_parent = True
+
+                if border_properties != prev_borders_properties or run_has_different_parent:
+                    if prev_borders_properties is not None:
+                        # We have a previous border tag opened, so need to close it
+                        yield HtmlTag(tag_name, closed=True)
+
+                    # Open a new tag for the new border and include all the properties
+                    border_attrs = self.get_borders_property(border_properties)
+                    yield HtmlTag(tag_name, closed=False, **border_attrs)
+
+                    self.current_border_item[item_name] = item
+                else:
+                    if prev_borders_properties is not None and \
+                            getattr(border_properties, 'between', None):
+                        # Render border between items
+                        border_attrs = self.get_borders_property(
+                            border_properties, only_between=True)
+
+                        yield HtmlTag(tag_name, **border_attrs)
+                        yield HtmlTag(tag_name, closed=True)
+
+        if close_border and prev_borders_properties is not None:
+            # At this stage we need to make sure that if there is an previously open tag
+            # about border we need to close it
+            yield HtmlTag(tag_name, closed=True)
+            self.current_border_item[item_name] = None
+
+        # All the inner items inside border tag are issued here
         for result in results:
             yield result
+
+        if border_properties and last_item:
+            # If the item with border is the last one we need to make sure that we close the
+            # tag
+            yield HtmlTag(tag_name, closed=True)
+            self.current_border_item[item_name] = None
+
+    def get_borders_property(self, border_properties, only_between=False):
+        attrs = {}
+        style = {}
+
+        if only_between:
+            style.update(border_properties.get_between_border_style())
+        else:
+            style.update(border_properties.get_padding_style())
+            style.update(border_properties.get_border_style())
+            style.update(border_properties.get_shadow_style())
+
+        if style:
+            attrs['style'] = convert_dictionary_to_style_fragment(style)
+
+        return attrs
 
     def export_paragraph_property_justification(self, paragraph, results):
         # TODO these classes could be applied on the paragraph, and not as
@@ -633,8 +752,17 @@ class PyDocXHTMLExporter(PyDocXExporter):
         table_cell_spans = table.calculate_table_cell_spans()
         self.table_cell_rowspan_tracking[table] = table_cell_spans
         results = super(PyDocXHTMLExporter, self).export_table(table)
+
+        # Before starting new table new need to make sure that if there is any paragraph
+        # with border opened before, we need to close it here.
+        for result in self.export_close_paragraph_border():
+            yield result
+
         tag = self.get_table_tag(table)
-        return tag.apply(results)
+        results = tag.apply(results)
+
+        for result in results:
+            yield result
 
     def export_table_row(self, table_row):
         results = super(PyDocXHTMLExporter, self).export_table_row(table_row)

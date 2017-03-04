@@ -1168,3 +1168,82 @@ class MultipleNestedListTestCase(TranslationTestCase):
 
         xml = DXB.xml(lis)
         return xml
+
+
+class ParagraphBordersTestCase(TranslationTestCase):
+    expected_output = '''
+        <div style="border-top:1pt solid #000000;padding:0pt">
+            <p>AAA</p>
+        </div>
+        <div style="border-bottom:0.625pt solid #0000FF;padding:0pt 0pt 2pt 0pt">
+            <p>BBB</p>
+        </div>
+    '''
+
+    def get_xml(self):
+        p1_border = {
+            'top': {
+                'color': 'auto'
+            }
+        }
+        p2_border = {
+            'bottom': {
+                'val': 'single',
+                'sz': '5',
+                'space': '2',
+                'color': '0000FF'
+            }
+        }
+        p_tags = [
+            DXB.p_tag('AAA', borders=p1_border),
+            DXB.p_tag('BBB', borders=p2_border)
+        ]
+        body = b''
+        for p_tag in p_tags:
+            body += p_tag
+        xml = DXB.xml(body)
+        return xml
+
+
+class RunBordersTestCase(TranslationTestCase):
+    expected_output = '''
+        <p>
+            <span style="border:1pt solid #00FF00">AAA</span>
+            <span style="border:1pt solid #00FF00;padding:1pt">BBB</span>
+        </p>
+    '''
+
+    def get_xml(self):
+        r1_border = {
+            'bdr': {
+                'color': '00FF00',
+                'space': '0'
+            }
+        }
+        r2_border = {
+            'bdr': {
+                'color': '00FF00',
+                'space': '1'
+            }
+        }
+
+        p_tags = [
+            DXB.p_tag(
+                [
+                    DXB.r_tag(
+                        [DXB.t_tag('AAA')],
+                        borders=r1_border
+                    ),
+                    DXB.r_tag(
+                        [DXB.t_tag('BBB')],
+                        borders=r2_border
+                    ),
+                ],
+            )
+        ]
+        body = b''
+        for p_tag in p_tags:
+            body += p_tag
+
+        xml = DXB.xml(body)
+        return xml

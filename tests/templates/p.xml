@@ -12,6 +12,11 @@
 		</w:numPr>
 		{% endif %}
 		{% if jc %}<w:jc w:val="{{ jc }}"/>{% endif %}
+		{% if borders %}
+			<w:pBdr>
+				{{ borders }}
+			</w:pBdr>
+		{% endif %}
 	</w:pPr>
 	{% for run_tag in run_tags %}
 		{{ run_tag }}

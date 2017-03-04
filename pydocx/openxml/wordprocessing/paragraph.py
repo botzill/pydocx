@@ -190,6 +190,11 @@ class Paragraph(XmlModel):
     def has_numbering_definition(self):
         return bool(self.numbering_definition)
 
+    @property
+    @memoized
+    def has_border_properties(self):
+        return bool(getattr(self.properties, 'border_properties', None))
+
     def get_indentation(self, indentation, only_level_ind=False):
         '''
         Get specific indentation of the current paragraph. If indentation is
