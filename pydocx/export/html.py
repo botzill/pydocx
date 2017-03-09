@@ -5,7 +5,6 @@ from __future__ import (
     print_function,
     unicode_literals,
 )
-
 import base64
 import posixpath
 from itertools import chain
@@ -187,8 +186,8 @@ class PyDocXHTMLExporter(PyDocXExporter):
                 'margin': '0px auto',
             },
             'p': {
-                'margin-top': '0px',
-                'margin-bottom': '0px'
+                'margin-top': '0',
+                'margin-bottom': '0'
             }
         }
 
@@ -259,7 +258,10 @@ class PyDocXHTMLExporter(PyDocXExporter):
         return tag.apply(results, allow_empty=False)
 
     def get_paragraph_tag(self, paragraph):
-        if paragraph.is_empty:
+        if self.in_table_cell and paragraph.parent.properties.is_continue_vertical_merge:
+            # We ignore such paragraphs here because are added via rowspan
+            return
+        elif paragraph.is_empty:
             return HtmlTag('p', custom_text=HTML_WHITE_SPACE)
 
         heading_style = paragraph.heading_style
@@ -340,13 +342,78 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
     def get_paragraph_property_spacing(self, paragraph):
         style = {}
+        if self.first_pass:
+            return style
 
-        spacing = paragraph.get_spacing()
+        previous_paragraph = None
+        next_paragraph = None
+        previous_paragraph_spacing = None
+        next_paragraph_spacing = None
+        spacing_after = None
+        spacing_before = None
 
-        if spacing['line']:
-            style['line-height'] = '%s%%' % (spacing['line'] * 100)
-        if spacing['after']:
-            style['margin-bottom'] = '{0:.2f}em'.format(convert_twips_to_ems(spacing['after']))
+        current_paragraph_spacing = paragraph.get_spacing()
+        current_par_index = self.paragraphs.index(paragraph)
+
+        if current_par_index > 0:
+            previous_paragraph = self.paragraphs[current_par_index - 1]
+            previous_paragraph_spacing = previous_paragraph.get_spacing()
+        if current_par_index < len(self.paragraphs) - 1:
+            next_paragraph = self.paragraphs[current_par_index + 1]
+            next_paragraph_spacing = next_paragraph.get_spacing()
+
+        if next_paragraph:
+            current_after = current_paragraph_spacing['after'] or 0
+            next_before = next_paragraph_spacing['before'] or 0
+
+            same_style = current_paragraph_spacing['parent_style'] == \
+                         next_paragraph_spacing['parent_style']
+
+            if same_style:
+                if not current_paragraph_spacing['contextual_spacing']:
+                    if next_paragraph_spacing['contextual_spacing']:
+                        spacing_after = current_after
+                    else:
+                        if current_after > next_before:
+                            spacing_after = current_after
+            else:
+                if current_after > next_before:
+                    spacing_after = current_after
+        else:
+            spacing_after = current_paragraph_spacing['after']
+
+        if previous_paragraph:
+            current_before = current_paragraph_spacing['before'] or 0
+            prev_after = previous_paragraph_spacing['after'] or 0
+
+            same_style = current_paragraph_spacing['parent_style'] == \
+                         previous_paragraph_spacing['parent_style']
+
+            if same_style:
+                if not current_paragraph_spacing['contextual_spacing']:
+                    if previous_paragraph_spacing['contextual_spacing']:
+                        if current_before > prev_after:
+                            spacing_before = current_before - prev_after
+                        else:
+                            spacing_before = 0
+                    else:
+                        if current_before > prev_after:
+                            spacing_before = current_before
+            else:
+                if current_before > prev_after:
+                    spacing_before = current_before
+        else:
+            spacing_before = current_paragraph_spacing['before']
+
+        if current_paragraph_spacing['line']:
+            style['line-height'] = '{0}%'.format(current_paragraph_spacing['line'] * 100)
+
+        if spacing_after:
+            style['margin-bottom'] = '{0:.2f}em'.format(convert_twips_to_ems(spacing_after))
+
+        if spacing_before:
+            style['margin-top'] = '{0:.2f}em'.format(convert_twips_to_ems(spacing_before))
+
         if style:
             style = {
                 'style': convert_dictionary_to_style_fragment(style)

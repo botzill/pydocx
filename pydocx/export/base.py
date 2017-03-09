@@ -31,6 +31,7 @@ class PyDocXExporter(object):
         self.footnote_tracker = []
 
         self.captured_runs = None
+        self.paragraphs = []
         self.complex_field_runs = []
 
         self.node_type_to_export_func_map = {
@@ -299,6 +300,11 @@ class PyDocXExporter(object):
         return self.yield_numbering_spans(body.children)
 
     def export_paragraph(self, paragraph):
+        if self.first_pass:
+            # To properly handle contextual spacing we need to know what is the style
+            # of the previous and next paragraphs. So, we save all the paragraphs here.
+            self.paragraphs.append(paragraph)
+
         children = self.yield_paragraph_children(paragraph)
         results = self.yield_nested(children, self.export_node)
         if paragraph.effective_properties:

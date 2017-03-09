@@ -7,12 +7,15 @@ from __future__ import (
 
 from collections import defaultdict
 
-from pydocx.models import XmlModel, XmlCollection
+from pydocx.models import XmlModel, XmlCollection, XmlChild
 from pydocx.openxml.wordprocessing.table_row import TableRow
+from pydocx.openxml.wordprocessing.table_properties import TableProperties
 
 
 class Table(XmlModel):
     XML_TAG = 'tbl'
+
+    properties = XmlChild(type=TableProperties)
 
     rows = XmlCollection(
         TableRow,
@@ -45,3 +48,28 @@ class Table(XmlModel):
                         if active_rowspan_for_column:
                             cell_to_rowspan_count[active_rowspan_for_column] += 1  # noqa
         return dict(cell_to_rowspan_count)
+
+    def get_style_chain_stack(self):
+        if not self.properties:
+            return
+
+        parent_style = self.properties.parent_style
+        if not parent_style:
+            return
+
+        part = getattr(self.container, 'style_definitions_part', None)
+        if part:
+            style_stack = part.get_style_chain_stack('table', parent_style)
+            for result in style_stack:
+                yield result
+
+    def get_paragraph_properties(self):
+        """Get default style paragraph properties for table"""
+
+        paragraph_properties = None
+        for style in self.get_style_chain_stack():
+            if style.paragraph_properties:
+                paragraph_properties = style.paragraph_properties
+                break
+
+        return paragraph_properties
