@@ -6,17 +6,18 @@ from __future__ import (
 )
 
 from pydocx.models import XmlModel, XmlCollection, XmlChild
+from pydocx.openxml.wordprocessing.bookmark import Bookmark
+from pydocx.openxml.wordprocessing.deleted_run import DeletedRun
 from pydocx.openxml.wordprocessing.hyperlink import Hyperlink
+from pydocx.openxml.wordprocessing.inserted_run import InsertedRun
 from pydocx.openxml.wordprocessing.paragraph_properties import ParagraphProperties  # noqa
 from pydocx.openxml.wordprocessing.run import Run
-from pydocx.openxml.wordprocessing.tab_char import TabChar
-from pydocx.openxml.wordprocessing.text import Text
-from pydocx.openxml.wordprocessing.smart_tag_run import SmartTagRun
-from pydocx.openxml.wordprocessing.inserted_run import InsertedRun
-from pydocx.openxml.wordprocessing.deleted_run import DeletedRun
 from pydocx.openxml.wordprocessing.sdt_run import SdtRun
 from pydocx.openxml.wordprocessing.simple_field import SimpleField
-from pydocx.openxml.wordprocessing.bookmark import Bookmark
+from pydocx.openxml.wordprocessing.smart_tag_run import SmartTagRun
+from pydocx.openxml.wordprocessing.tab_char import TabChar
+from pydocx.openxml.wordprocessing.text import Text
+from pydocx.openxml.wordprocessing.table_cell import TableCell
 from pydocx.util.memoize import memoized
 
 
@@ -245,27 +246,62 @@ class Paragraph(XmlModel):
         """
         results = {
             'line': None,
-            'after': None
+            'after': None,
+            'before': None,
+            'contextual_spacing': False,
+            'parent_style': None
         }
 
-        default_properties_spacing = self.default_doc_styles.paragraph.properties
-        no_spacing_properties = not self.properties or self.properties.no_spacing
+        # Get the paragraph_properties from the parent styles
+        style_paragraph_properties = None
+        for style in self.get_style_chain_stack():
+            if style.paragraph_properties:
+                style_paragraph_properties = style.paragraph_properties
+                break
 
-        if not default_properties_spacing and no_spacing_properties:
+        if style_paragraph_properties:
+            results['contextual_spacing'] = bool(style_paragraph_properties.contextual_spacing)
+
+        default_paragraph_properties = None
+        if self.default_doc_styles and self.default_doc_styles.paragraph:
+            default_paragraph_properties = self.default_doc_styles.paragraph.properties
+
+        # Spacing properties can be defined in multiple places and we need to get some
+        # kind of order of check
+        properties_order = [None, None, None]
+        if self.properties:
+            properties_order[0] = self.properties
+        if isinstance(self.parent, TableCell):
+            properties_order[1] = self.parent.parent_table.get_paragraph_properties()
+        if not self.properties or not self.properties.spacing_properties:
+            properties_order[2] = default_paragraph_properties
+
+        spacing_properties = None
+        contextual_spacing = None
+
+        for properties in properties_order:
+            if spacing_properties is None:
+                spacing_properties = getattr(properties, 'spacing_properties', None)
+            if contextual_spacing is None:
+                contextual_spacing = getattr(properties, 'contextual_spacing', None)
+
+        if not spacing_properties:
             return results
 
-        if no_spacing_properties:
-            properties = default_properties_spacing
-        else:
-            properties = self.properties
+        if contextual_spacing is not None:
+            results['contextual_spacing'] = bool(contextual_spacing)
 
-        spacing_line = properties.to_int('spacing_line')
-        spacing_after = properties.to_int('spacing_after')
+        if self.properties:
+            results['parent_style'] = self.properties.parent_style
 
-        if default_properties_spacing and spacing_line is None \
-                and bool(properties.spacing_after_auto_spacing):
+        spacing_line = spacing_properties.to_int('line')
+        spacing_after = spacing_properties.to_int('after')
+        spacing_before = spacing_properties.to_int('before')
+
+        if default_paragraph_properties and spacing_line is None \
+                and bool(spacing_properties.after_auto_spacing):
             # get the spacing_line from the default definition
-            spacing_line = default_properties_spacing.to_int('spacing_line')
+            spacing_line = default_paragraph_properties.spacing_properties.to_int('line')
 
         if spacing_line:
             line = spacing_line / 240.0
@@ -275,5 +311,8 @@ class Paragraph(XmlModel):
 
         if spacing_after is not None:
             results['after'] = spacing_after
+
+        if spacing_before is not None:
+            results['before'] = spacing_before
 
         return results

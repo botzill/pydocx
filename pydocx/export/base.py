@@ -33,6 +33,7 @@ class PyDocXExporter(object):
         self.footnote_tracker = []
 
         self.captured_runs = None
+        self.paragraphs = []
         self.complex_field_runs = []
         self.paragraphs = []
         self.border_and_shading_builder = self.border_and_shading_builder_class(
@@ -305,6 +306,8 @@ class PyDocXExporter(object):
 
     def export_paragraph(self, paragraph):
         if self.first_pass:
+            # To properly handle contextual spacing we need to know what is the style
+            # of the previous and next paragraphs. So, we save all the paragraphs here.
             self.paragraphs.append(paragraph)
 
         children = self.yield_paragraph_children(paragraph)

@@ -7,6 +7,7 @@ from __future__ import (
 
 from pydocx.models import XmlModel, XmlChild, XmlAttribute
 from pydocx.openxml.wordprocessing.run_properties import RunProperties
+from pydocx.openxml.wordprocessing.paragraph_properties import ParagraphProperties
 
 
 class Style(XmlModel):
@@ -16,6 +17,7 @@ class Style(XmlModel):
     style_id = XmlAttribute(name='styleId', default='')
     name = XmlChild(attrname='val', default='')
     run_properties = XmlChild(type=RunProperties)
+    paragraph_properties = XmlChild(type=ParagraphProperties)
     parent_style = XmlChild(name='basedOn', attrname='val')
 
     def is_a_heading(self):
