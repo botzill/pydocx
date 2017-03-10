@@ -50,26 +50,12 @@ class Table(XmlModel):
         return dict(cell_to_rowspan_count)
 
     def get_style_chain_stack(self):
-        if not self.properties:
-            return
-
-        parent_style = self.properties.parent_style
-        if not parent_style:
-            return
+        # Even if parent style is not defined we still need to check the default style
+        # properties applied
+        parent_style = getattr(self.properties, 'parent_style', None)
 
         part = getattr(self.container, 'style_definitions_part', None)
         if part:
             style_stack = part.get_style_chain_stack('table', parent_style)
             for result in style_stack:
                 yield result
-
-    def get_paragraph_properties(self):
-        """Get default style paragraph properties for table"""
-
-        paragraph_properties = None
-        for style in self.get_style_chain_stack():
-            if style.paragraph_properties:
-                paragraph_properties = style.paragraph_properties
-                break
-
-        return paragraph_properties

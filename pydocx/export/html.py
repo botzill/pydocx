@@ -83,6 +83,14 @@ class PyDocXHTMLExporter(PyDocXExporter):
             'p': {
                 'margin-top': '0',
                 'margin-bottom': '0'
+            },
+            'ol': {
+                'margin-top': '0',
+                'margin-bottom': '0'
+            },
+            'ul': {
+                'margin-top': '0',
+                'margin-bottom': '0'
             }
         }
 
@@ -276,7 +284,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
             next_before = next_paragraph_spacing['before'] or 0
 
             same_style = current_paragraph_spacing['parent_style'] == \
-                         next_paragraph_spacing['parent_style']
+                next_paragraph_spacing['parent_style']
 
             if same_style:
                 if not current_paragraph_spacing['contextual_spacing']:
@@ -296,7 +304,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
             prev_after = previous_paragraph_spacing['after'] or 0
 
             same_style = current_paragraph_spacing['parent_style'] == \
-                         previous_paragraph_spacing['parent_style']
+                previous_paragraph_spacing['parent_style']
 
             if same_style:
                 if not current_paragraph_spacing['contextual_spacing']:
@@ -393,7 +401,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
                         include_text_indent=True
                     )
                     if 'text-indent' in listing_style and \
-                                    listing_style['text-indent'] != '0.00em':
+                            listing_style['text-indent'] != '0.00em':
                         style['text-indent'] = listing_style['text-indent']
 
         if indentation_right:

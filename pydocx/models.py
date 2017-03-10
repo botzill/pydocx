@@ -326,6 +326,8 @@ class XmlModel(object):
             if field.name is not None:
                 attr_name = field.name
             value = element.attrib.get(attr_name, field.default)
+            if callable(field.type):
+                value = field.type(value)
             kwargs[field_name] = value
 
         # Child tag fields may specify a handler/type, which is responsible for

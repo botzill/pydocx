@@ -46,12 +46,9 @@ class Run(XmlModel):
     )
 
     def get_style_chain_stack(self):
-        if not self.properties:
-            return
-
-        parent_style = self.properties.parent_style
-        if not parent_style:
-            return
+        # Even if parent style is not defined we still need to check the default style
+        # properties applied
+        parent_style = getattr(self.properties, 'parent_style', None)
 
         # TODO the getattr is necessary because of footnotes. From the context
         # of a footnote, a paragraph's container is the footnote part, which
