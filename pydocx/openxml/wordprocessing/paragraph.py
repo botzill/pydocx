@@ -7,7 +7,6 @@ from __future__ import (
 
 from pydocx.models import XmlModel, XmlCollection, XmlChild
 from pydocx.openxml.wordprocessing.bookmark import Bookmark
-from pydocx.openxml.wordprocessing.br import Break
 from pydocx.openxml.wordprocessing.deleted_run import DeletedRun
 from pydocx.openxml.wordprocessing.hyperlink import Hyperlink
 from pydocx.openxml.wordprocessing.inserted_run import InsertedRun
@@ -18,7 +17,6 @@ from pydocx.openxml.wordprocessing.simple_field import SimpleField
 from pydocx.openxml.wordprocessing.smart_tag_run import SmartTagRun
 from pydocx.openxml.wordprocessing.tab_char import TabChar
 from pydocx.openxml.wordprocessing.text import Text
-from pydocx.openxml.wordprocessing.table_cell import TableCell
 from pydocx.util.memoize import memoized
 
 
@@ -38,10 +36,6 @@ class Paragraph(XmlModel):
         Bookmark
     )
 
-    def __init__(self, **kwargs):
-        super(Paragraph, self).__init__(**kwargs)
-        self._effective_properties = None
-
     @property
     def is_empty(self):
         if not self.children:
@@ -52,20 +46,73 @@ class Paragraph(XmlModel):
         if len(self.children) == 1:
             first_child = self.children[0]
             if isinstance(first_child, Bookmark) and \
-                            first_child.name in ('_GoBack',):
+                    first_child.name in ('_GoBack',):
                 return True
             # We can have cases when only run properties are defined and no text
             elif not first_child.children:
                 return True
         return False
 
+    def _get_properties_inherited_from_parent_table(self):
+        from pydocx.openxml.wordprocessing.table import Table
+
+        inherited_properties = {}
+
+        parent_table = self.get_first_ancestor(Table)
+        if parent_table:
+            style_stack = parent_table.get_style_chain_stack()
+            for style in reversed(list(style_stack)):
+                if style.paragraph_properties:
+                    inherited_properties.update(
+                        dict(style.paragraph_properties.fields),
+                    )
+        return inherited_properties
+
+    def _get_inherited_properties_from_parent_style(self):
+        inherited_properties = {}
+        style_stack = self.get_style_chain_stack()
+        for style in reversed(list(style_stack)):
+            if style.paragraph_properties:
+                inherited_properties.update(
+                    dict(style.paragraph_properties.fields),
+                )
+        return inherited_properties
+
     @property
+    def inherited_properties(self):
+        properties = {}
+
+        if self.default_doc_styles and \
+                getattr(self.default_doc_styles.paragraph, 'properties'):
+            properties.update(
+                dict(self.default_doc_styles.paragraph.properties.fields),
+            )
+        properties.update(
+            self._get_inherited_properties_from_parent_style(),
+        )
+        # Tables can also define custom paragraph pr
+        properties.update(
+            self._get_properties_inherited_from_parent_table(),
+        )
+
+        # TODO When enable this make sure that you check the paragraph margins logic
+        # numbering_level = self.get_numbering_level()
+        # if numbering_level and numbering_level.paragraph_properties:
+        #     properties.update(
+        #         dict(numbering_level.paragraph_properties.fields),
+        #     )
+
+        return ParagraphProperties(**properties)
+
+    @property
+    @memoized
     def effective_properties(self):
-        # TODO need to calculate effective properties like Run
-        if not self._effective_properties:
-            properties = self.properties
-            self._effective_properties = properties
-        return self._effective_properties
+        inherited_properties = self.inherited_properties
+        effective_properties = {}
+        effective_properties.update(dict(inherited_properties.fields))
+        if self.properties:
+            effective_properties.update(dict(self.properties.fields))
+        return ParagraphProperties(**effective_properties)
 
     @property
     def numbering_definition(self):
@@ -76,12 +123,9 @@ class Paragraph(XmlModel):
         return self.has_ancestor(SdtBlock)
 
     def get_style_chain_stack(self):
-        if not self.properties:
-            return
-
-        parent_style = self.properties.parent_style
-        if not parent_style:
-            return
+        # Even if parent style is not defined we still need to check the default style
+        # properties applied
+        parent_style = getattr(self.properties, 'parent_style', None)
 
         # TODO the getattr is necessary because of footnotes. From the context
         # of a footnote, a paragraph's container is the footnote part, which
@@ -117,9 +161,9 @@ class Paragraph(XmlModel):
         part = getattr(self.container, 'numbering_definitions_part', None)
         if not part:
             return
-        if not self.effective_properties:
+        if not self.properties:
             return
-        numbering_properties = self.effective_properties.numbering_properties
+        numbering_properties = self.properties.numbering_properties
         if not numbering_properties:
             return
         return part.numbering.get_numbering_definition(
@@ -131,9 +175,9 @@ class Paragraph(XmlModel):
         numbering_definition = self.get_numbering_definition()
         if not numbering_definition:
             return
-        if not self.effective_properties:
+        if not self.properties:
             return
-        numbering_properties = self.effective_properties.numbering_properties
+        numbering_properties = self.properties.numbering_properties
         if not numbering_properties:
             return
         return numbering_definition.get_level(
@@ -231,70 +275,26 @@ class Paragraph(XmlModel):
         """Get paragraph spacing according to:
                 ECMA-376, 3rd Edition (June, 2011),
                 Fundamentals and Markup Language Reference § 17.3.1.33.
-
-            Note: Partial implementation for now.
         """
         results = {
             'line': None,
             'after': None,
             'before': None,
-            'contextual_spacing': False,
-            'parent_style': None
+            'contextual_spacing': bool(self.effective_properties.contextual_spacing),
+            'parent_style': self.effective_properties.parent_style
         }
 
-        # Get the paragraph_properties from the parent styles
-        style_paragraph_properties = None
-        for style in self.get_style_chain_stack():
-            if style.paragraph_properties:
-                style_paragraph_properties = style.paragraph_properties
-                break
+        spacing_properties = self.effective_properties.spacing_properties
 
-        if style_paragraph_properties:
-            results['contextual_spacing'] = bool(style_paragraph_properties.contextual_spacing)
-
-        default_paragraph_properties = None
-        if self.default_doc_styles and self.default_doc_styles.paragraph:
-            default_paragraph_properties = self.default_doc_styles.paragraph.properties
-
-        # Spacing properties can be defined in multiple places and we need to get some
-        # kind of order of check
-        properties_order = [None, None, None]
-        if self.properties:
-            properties_order[0] = self.properties
-        if isinstance(self.parent, TableCell):
-            properties_order[1] = self.parent.parent_table.get_paragraph_properties()
-        if not self.properties or not self.properties.spacing_properties:
-            properties_order[2] = default_paragraph_properties
-
-        spacing_properties = None
-        contextual_spacing = None
-
-        for properties in properties_order:
-            if spacing_properties is None:
-                spacing_properties = getattr(properties, 'spacing_properties', None)
-            if contextual_spacing is None:
-                contextual_spacing = getattr(properties, 'contextual_spacing', None)
-
-        if not spacing_properties:
+        if spacing_properties is None:
             return results
-
-        if contextual_spacing is not None:
-            results['contextual_spacing'] = bool(contextual_spacing)
-
-        if self.properties:
-            results['parent_style'] = self.properties.parent_style
 
         spacing_line = spacing_properties.to_int('line')
         spacing_after = spacing_properties.to_int('after')
         spacing_before = spacing_properties.to_int('before')
 
-        if default_paragraph_properties and spacing_line is None \
-                and bool(spacing_properties.after_auto_spacing):
-            # get the spacing_line from the default definition
-            spacing_line = default_paragraph_properties.spacing_properties.to_int('line')
-
         if spacing_line:
-            line = spacing_line / 240.0
+            line = float("%.2f" % (spacing_line / 240.0))
             # default line spacing is 1 so no need to add attribute
             if line != 1.0:
                 results['line'] = line

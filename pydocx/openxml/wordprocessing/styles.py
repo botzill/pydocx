@@ -22,9 +22,16 @@ class Styles(XmlModel):
         super(Styles, self).__init__(styles=styles, *args, **kwargs)
 
         styles_by_type = defaultdict(dict)
+        default_styles_by_type = defaultdict(dict)
         for style in self.styles:
             styles_by_type[style.style_type][style.style_id] = style
+            if bool(style.style_default):
+                default_styles_by_type[style.style_type][style.style_id] = style
         self.styles_by_type = dict(styles_by_type)
+        self.default_styles_by_type = dict(default_styles_by_type)
 
     def get_styles_by_type(self, style_type):
         return self.styles_by_type.get(style_type, {})
+
+    def get_default_styles_by_type(self, style_type):
+        return self.default_styles_by_type.get(style_type, {})
