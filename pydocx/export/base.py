@@ -346,7 +346,6 @@ class PyDocXExporter(object):
         if self.first_pass:
             if self.captured_runs is not None:
                 self.captured_runs.append(run)
-
         # TODO squash multiple sequential text nodes into one?
         results = self.yield_nested(run.children, self.export_node)
         if run.effective_properties:

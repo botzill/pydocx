@@ -153,10 +153,12 @@ class PyDocXHTMLExporter(PyDocXExporter):
         return tag.apply(results, allow_empty=False)
 
     def get_paragraph_tag(self, paragraph):
-        if self.in_table_cell and paragraph.parent.properties.is_continue_vertical_merge:
-            # We ignore such paragraphs here because are added via rowspan
-            return
-        elif paragraph.is_empty:
+        if isinstance(paragraph.parent, wordprocessing.TableCell):
+            cell_properties = paragraph.parent.properties
+            if cell_properties and cell_properties.is_continue_vertical_merge:
+                # We ignore such paragraphs here because are added via rowspan
+                return
+        if paragraph.is_empty:
             return HtmlTag('p', custom_text=HTML_WHITE_SPACE)
 
         heading_style = paragraph.heading_style
@@ -193,7 +195,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
         tag = self.get_paragraph_tag(paragraph)
         if tag:
             attrs = self.get_paragraph_styles(paragraph)
-            tag.attrs = attrs
+            tag.attrs.update(attrs)
             results = tag.apply(results)
 
         for result in self.border_and_shading_builder.export_borders(
@@ -248,6 +250,11 @@ class PyDocXHTMLExporter(PyDocXExporter):
         if self.first_pass:
             return style
 
+        try:
+            current_par_index = self.paragraphs.index(paragraph)
+        except ValueError:
+            return style
+
         previous_paragraph = None
         next_paragraph = None
         previous_paragraph_spacing = None
@@ -256,7 +263,6 @@ class PyDocXHTMLExporter(PyDocXExporter):
         spacing_before = None
 
         current_paragraph_spacing = paragraph.get_spacing()
-        current_par_index = self.paragraphs.index(paragraph)
 
         if current_par_index > 0:
             previous_paragraph = self.paragraphs[current_par_index - 1]
