@@ -7,6 +7,7 @@ from __future__ import (
 
 from pydocx.models import XmlModel, XmlCollection, XmlChild
 from pydocx.openxml.wordprocessing.bookmark import Bookmark
+from pydocx.openxml.wordprocessing.br import Break
 from pydocx.openxml.wordprocessing.deleted_run import DeletedRun
 from pydocx.openxml.wordprocessing.hyperlink import Hyperlink
 from pydocx.openxml.wordprocessing.inserted_run import InsertedRun
@@ -48,11 +49,14 @@ class Paragraph(XmlModel):
 
         # we may have cases when a paragraph has a Bookmark with name '_GoBack'
         # and we should treat it as empty paragraph
-        if len(self.children) == 1 and \
-                isinstance(self.children[0], Bookmark) and \
-                        self.children[0].name in ('_GoBack',):
-            return True
-
+        if len(self.children) == 1:
+            first_child = self.children[0]
+            if isinstance(first_child, Bookmark) and \
+                            first_child.name in ('_GoBack',):
+                return True
+            # We can have cases when only run properties are defined and no text
+            elif not first_child.children:
+                return True
         return False
 
     @property
