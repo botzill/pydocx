@@ -23,7 +23,7 @@ class BaseBorder(XmlModel):
     width = XmlAttribute(name='sz')
     _color = XmlAttribute(name='color')
     space = XmlAttribute(name='space')
-    shadow = XmlAttribute(type=OnOff, name='shadow')
+    shadow = XmlAttribute(type=OnOff, name='shadow', default='0')
 
     @property
     def color(self):
@@ -80,7 +80,7 @@ class BaseBorder(XmlModel):
                     obj.width,
                     obj.color,
                     obj.spacing,
-                    obj.shadow)
+                    bool(obj.shadow))
 
     def __eq__(self, other):
         return self.attributes_list(self) == self.attributes_list(other)

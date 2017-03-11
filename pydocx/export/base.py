@@ -33,7 +33,6 @@ class PyDocXExporter(object):
         self.footnote_tracker = []
 
         self.captured_runs = None
-        self.paragraphs = []
         self.complex_field_runs = []
         self.paragraphs = []
         self.border_and_shading_builder = self.border_and_shading_builder_class(
