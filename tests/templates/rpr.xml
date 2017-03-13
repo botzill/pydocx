@@ -5,4 +5,7 @@
 		{% if borders %}
 			{{ borders }}
 		{% endif %}
+		{% if shading %}
+			{{ shading }}
+		{% endif %}
 	</w:rPr>

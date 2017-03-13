@@ -58,6 +58,7 @@ class ConvertDocxToHtmlTestCase(DocXFixtureTestCaseFactory):
         'textbox',
         'track_changes_on',
         'paragraphs_with_borders',
+        'paragraphs_with_borders_and_shading',
     )
 
     @raises(MalformedDocxException)

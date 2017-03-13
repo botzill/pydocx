@@ -282,7 +282,6 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
     def export_paragraph(self, paragraph):
         results = super(PyDocXHTMLExporter, self).export_paragraph(paragraph)
-
         results = is_not_empty_and_not_only_whitespace(results)
 
         # TODO@botzill In PR#234 we render empty paragraphs properly so
@@ -314,14 +313,25 @@ class PyDocXHTMLExporter(PyDocXExporter):
         item_is_paragraph = isinstance(item, wordprocessing.Paragraph)
 
         prev_borders_properties = None
+        prev_shading_properties = None
+
         border_properties = None
+        shading_properties = None
+
         current_border_item = self.current_border_item.get(item_name)
         if current_border_item:
-            prev_borders_properties = current_border_item.\
-                effective_properties.border_properties
+            item_properties = current_border_item.effective_properties
+            prev_borders_properties = item_properties.border_properties
+            prev_shading_properties = item_properties.shading_properties
 
         last_item = False
         close_border = True
+
+        def prev_properties():
+            return prev_borders_properties or prev_shading_properties
+
+        def current_properties():
+            return border_properties or shading_properties
 
         def current_item_is_last_child(children, child_type):
             for p_child in reversed(children):
@@ -344,7 +354,9 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
         if item.effective_properties:
             border_properties = item.effective_properties.border_properties
-            if border_properties:
+            shading_properties = item.effective_properties.shading_properties
+
+            if current_properties():
                 last_item = is_last_item()
                 close_border = False
                 run_has_different_parent = False
@@ -355,27 +367,48 @@ class PyDocXHTMLExporter(PyDocXExporter):
                     if current_border_item.parent != item.parent:
                         run_has_different_parent = True
 
-                if border_properties != prev_borders_properties or run_has_different_parent:
-                    if prev_borders_properties is not None:
+                if border_properties != prev_borders_properties or \
+                    shading_properties != prev_shading_properties or \
+                        run_has_different_parent:
+                    if prev_properties() is not None:
                         # We have a previous border tag opened, so need to close it
                         yield HtmlTag(tag_name, closed=True)
 
-                    # Open a new tag for the new border and include all the properties
-                    border_attrs = self.get_borders_property(border_properties)
-                    yield HtmlTag(tag_name, closed=False, **border_attrs)
+                    # Open a new tag for the new border/shading and include all the properties
+                    attrs = self.get_borders_property(
+                        border_properties,
+                        prev_borders_properties,
+                        shading_properties
+                    )
+                    yield HtmlTag(tag_name, closed=False, **attrs)
 
                     self.current_border_item[item_name] = item
-                else:
-                    if prev_borders_properties is not None and \
-                            getattr(border_properties, 'between', None):
+
+                if border_properties == prev_borders_properties:
+                    border_between = getattr(border_properties, 'between', None)
+                    add_between_border = bool(border_between)
+
+                    if border_between and prev_borders_properties is not None:
+                        if shading_properties:
+                            if shading_properties == prev_shading_properties:
+                                add_between_border = True
+                            else:
+
+                                add_between_border = prev_borders_properties.bottom != \
+                                                     border_between
+
+                    if add_between_border:
                         # Render border between items
                         border_attrs = self.get_borders_property(
-                            border_properties, only_between=True)
+                            border_properties,
+                            prev_borders_properties,
+                            shading_properties,
+                            only_between=True)
 
                         yield HtmlTag(tag_name, **border_attrs)
                         yield HtmlTag(tag_name, closed=True)
 
-        if close_border and prev_borders_properties is not None:
+        if close_border and prev_properties() is not None:
             # At this stage we need to make sure that if there is an previously open tag
             # about border we need to close it
             yield HtmlTag(tag_name, closed=True)
@@ -385,22 +418,47 @@ class PyDocXHTMLExporter(PyDocXExporter):
         for result in results:
             yield result
 
-        if border_properties and last_item:
+        if current_properties() and last_item:
             # If the item with border is the last one we need to make sure that we close the
             # tag
             yield HtmlTag(tag_name, closed=True)
             self.current_border_item[item_name] = None
 
-    def get_borders_property(self, border_properties, only_between=False):
+    def get_borders_property(
+            self,
+            border_properties,
+            prev_border_properties,
+            shading_properties=None,
+            only_between=False):
         attrs = {}
         style = {}
 
-        if only_between:
-            style.update(border_properties.get_between_border_style())
-        else:
-            style.update(border_properties.get_padding_style())
-            style.update(border_properties.get_border_style())
-            style.update(border_properties.get_shadow_style())
+        if border_properties:
+            if only_between:
+                style.update(border_properties.get_between_border_style())
+            else:
+                style.update(border_properties.get_padding_style())
+                style.update(border_properties.get_shadow_style())
+
+                border_style = border_properties.get_border_style()
+
+                if prev_border_properties and \
+                        isinstance(prev_border_properties, wordprocessing.ParagraphBorders):
+
+                    cur_top = border_properties.top
+                    prev_bottom = prev_border_properties.bottom
+
+                    all_borders_defined = all([
+                        border_properties.borders_have_same_properties(),
+                        prev_border_properties.borders_have_same_properties()
+                    ])
+                    # We need to reset one border if adjacent identical borders are met
+                    if all_borders_defined and cur_top == prev_bottom:
+                        border_style['border-top'] = '0'
+                style.update(border_style)
+
+        if shading_properties and shading_properties.background_color:
+            style['background-color'] = '#{0}'.format(shading_properties.background_color)
 
         if style:
             attrs['style'] = convert_dictionary_to_style_fragment(style)

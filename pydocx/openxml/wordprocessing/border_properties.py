@@ -47,6 +47,7 @@ class BaseBorder(XmlModel):
                 width *= 3
             elif self.style in ('triple',):
                 width *= 5
+            width = float('%.1f' % width)
         else:
             width = 1
 
@@ -148,6 +149,9 @@ class ParagraphBorders(XmlModel, BaseBorderStyle):
         return attributes
 
     def borders_have_same_properties(self):
+        if not any(self.all_borders):
+            return False
+
         color = self.get_borders_attribute('color', to_type=set)
         style = self.get_borders_attribute('style', to_type=set)
         width = self.get_borders_attribute('width', to_type=set)
@@ -172,18 +176,20 @@ class ParagraphBorders(XmlModel, BaseBorderStyle):
         border_styles = {}
         if self.between:
             border_styles['border-top'] = self.between.get_css_border_style()
+
         # Because there can be padding added by the parent border we need to make sure that
         # we adapt margins to not have extra space on left/right
         margins = [
             # top
             self.between.spacing,
             # right
-            '-%s' % self.right.spacing,
+            '%s' % -int(getattr(self.right, 'spacing', 0)),
             # bottom
             self.between.spacing,
             # left
-            '-%s' % self.left.spacing
+            '%s' % -int(getattr(self.left, 'spacing', 0))
         ]
+
         border_styles['margin'] = ' '.join(map(lambda x: '%spt' % x, margins))
         return border_styles
 
