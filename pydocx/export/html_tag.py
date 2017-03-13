@@ -58,6 +58,7 @@ class HtmlTag(object):
             allow_self_closing=False,
             closed=False,
             allow_whitespace=False,
+            custom_text=None,
             **attrs
     ):
         self.tag = tag
@@ -65,6 +66,7 @@ class HtmlTag(object):
         self.attrs = attrs
         self.closed = closed
         self.allow_whitespace = allow_whitespace
+        self.custom_text = custom_text
 
     def apply(self, results, allow_empty=True):
         if not allow_empty:
@@ -73,6 +75,10 @@ class HtmlTag(object):
                 return
 
         sequence = [[self]]
+
+        if self.custom_text:
+            sequence.append([self.custom_text])
+
         if results is not None:
             sequence.append(results)
 
