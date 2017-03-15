@@ -23,9 +23,11 @@ from pydocx.export.base import PyDocXExporter
 from pydocx.export.numbering_span import NumberingItem
 from pydocx.openxml import wordprocessing
 from pydocx.util.uri import uri_is_external
-from pydocx.util.xml import (
-    convert_dictionary_to_html_attributes,
-    convert_dictionary_to_style_fragment,
+from pydocx.util.xml import convert_dictionary_to_style_fragment
+from pydocx.export.html_tag import (
+    HtmlTag,
+    is_only_whitespace,
+    is_not_empty_and_not_only_whitespace
 )
 
 
@@ -52,106 +54,6 @@ def get_first_from_sequence(sequence, default=None):
     except StopIteration:
         pass
     return first_result
-
-
-def is_only_whitespace(obj):
-    '''
-    If the obj has `strip` return True if calling strip on the obj results in
-    an empty instance. Otherwise, return False.
-    '''
-    if hasattr(obj, 'strip'):
-        return not obj.strip()
-    return False
-
-
-def is_not_empty_and_not_only_whitespace(gen):
-    '''
-    Determine if a generator is empty, or consists only of whitespace.
-
-    If the generator is non-empty, return the original generator. Otherwise,
-    return None
-    '''
-    queue = []
-    if gen is None:
-        return
-    try:
-        for item in gen:
-            queue.append(item)
-            is_whitespace = True
-            if isinstance(item, HtmlTag):
-                # If we encounter a tag that allows whitespace, then we can stop
-                is_whitespace = not item.allow_whitespace
-            else:
-                is_whitespace = is_only_whitespace(item)
-
-            if not is_whitespace:
-                # This item isn't whitespace, so we're done scanning
-                return chain(queue, gen)
-
-    except StopIteration:
-        pass
-
-
-class HtmlTag(object):
-    closed_tag_format = '</{tag}>'
-
-    def __init__(
-            self,
-            tag,
-            allow_self_closing=False,
-            closed=False,
-            allow_whitespace=False,
-            **attrs
-    ):
-        self.tag = tag
-        self.allow_self_closing = allow_self_closing
-        self.attrs = attrs
-        self.closed = closed
-        self.allow_whitespace = allow_whitespace
-
-    def apply(self, results, allow_empty=True):
-        if not allow_empty:
-            results = is_not_empty_and_not_only_whitespace(results)
-            if results is None:
-                return
-
-        sequence = [[self]]
-        if results is not None:
-            sequence.append(results)
-
-        if not self.allow_self_closing:
-            sequence.append([self.close()])
-
-        results = chain(*sequence)
-
-        for result in results:
-            yield result
-
-    def close(self):
-        return HtmlTag(
-            tag=self.tag,
-            closed=True,
-        )
-
-    def to_html(self):
-        if self.closed is True:
-            return self.closed_tag_format.format(tag=self.tag)
-        else:
-            attrs = self.get_html_attrs()
-            end_bracket = '>'
-            if self.allow_self_closing:
-                end_bracket = ' />'
-            if attrs:
-                return '<{tag} {attrs}{end}'.format(
-                    tag=self.tag,
-                    attrs=attrs,
-                    end=end_bracket,
-                )
-            else:
-                return '<{tag}{end}'.format(tag=self.tag, end=end_bracket)
-
-    def get_html_attrs(self):
-        return convert_dictionary_to_html_attributes(self.attrs)
 
 
 class PyDocXHTMLExporter(PyDocXExporter):
@@ -277,7 +179,8 @@ class PyDocXHTMLExporter(PyDocXExporter):
     def export_run(self, run):
         results = super(PyDocXHTMLExporter, self).export_run(run)
 
-        for result in self.export_borders(run, results, tag_name='span'):
+        for result in self.border_and_shading_builder.export_borders(
+                run, results, first_pass=self.first_pass):
             yield result
 
     def export_paragraph(self, paragraph):
@@ -293,177 +196,9 @@ class PyDocXHTMLExporter(PyDocXExporter):
         if tag:
             results = tag.apply(results)
 
-        for tag in self.export_borders(paragraph, results, tag_name='div'):
-            yield tag
-
-    def export_close_paragraph_border(self):
-        if self.current_border_item.get('Paragraph'):
-            yield HtmlTag('div', closed=True)
-            self.current_border_item['Paragraph'] = None
-
-    def export_borders(self, item, results, tag_name='div'):
-        if self.first_pass:
-            for result in results:
-                yield result
-            return
-
-        # For now we have here Paragraph and Run
-        item_name = item.__class__.__name__
-        item_is_run = isinstance(item, wordprocessing.Run)
-        item_is_paragraph = isinstance(item, wordprocessing.Paragraph)
-
-        prev_borders_properties = None
-        prev_shading_properties = None
-
-        border_properties = None
-        shading_properties = None
-
-        current_border_item = self.current_border_item.get(item_name)
-        if current_border_item:
-            item_properties = current_border_item.effective_properties
-            prev_borders_properties = item_properties.border_properties
-            prev_shading_properties = item_properties.shading_properties
-
-        last_item = False
-        close_border = True
-
-        def prev_properties():
-            return prev_borders_properties or prev_shading_properties
-
-        def current_properties():
-            return border_properties or shading_properties
-
-        def current_item_is_last_child(children, child_type):
-            for p_child in reversed(children):
-                if isinstance(p_child, child_type):
-                    return p_child == item
-            return False
-
-        def is_last_item():
-            if item_is_paragraph:
-                if isinstance(item.parent, wordprocessing.TableCell):
-                    return current_item_is_last_child(
-                        item.parent.children, wordprocessing.Paragraph)
-                elif item == self.last_paragraph:
-                    return True
-            elif item_is_run:
-                # Check if current item is the last Run item from paragraph children
-                return current_item_is_last_child(item.parent.children, wordprocessing.Run)
-
-            return False
-
-        if item.effective_properties:
-            border_properties = item.effective_properties.border_properties
-            shading_properties = item.effective_properties.shading_properties
-
-            if current_properties():
-                last_item = is_last_item()
-                close_border = False
-                run_has_different_parent = False
-
-                # If run is from different paragraph then we may need to draw separate border
-                # even if border properties are the same
-                if item_is_run and current_border_item:
-                    if current_border_item.parent != item.parent:
-                        run_has_different_parent = True
-
-                if border_properties != prev_borders_properties or \
-                    shading_properties != prev_shading_properties or \
-                        run_has_different_parent:
-                    if prev_properties() is not None:
-                        # We have a previous border tag opened, so need to close it
-                        yield HtmlTag(tag_name, closed=True)
-
-                    # Open a new tag for the new border/shading and include all the properties
-                    attrs = self.get_borders_property(
-                        border_properties,
-                        prev_borders_properties,
-                        shading_properties
-                    )
-                    yield HtmlTag(tag_name, closed=False, **attrs)
-
-                    self.current_border_item[item_name] = item
-
-                if border_properties == prev_borders_properties:
-                    border_between = getattr(border_properties, 'between', None)
-                    add_between_border = bool(border_between)
-
-                    if border_between and prev_borders_properties is not None:
-                        if shading_properties:
-                            if shading_properties == prev_shading_properties:
-                                add_between_border = True
-                            else:
-
-                                add_between_border = prev_borders_properties.bottom != \
-                                                     border_between
-
-                    if add_between_border:
-                        # Render border between items
-                        border_attrs = self.get_borders_property(
-                            border_properties,
-                            prev_borders_properties,
-                            shading_properties,
-                            only_between=True)
-
-                        yield HtmlTag(tag_name, **border_attrs)
-                        yield HtmlTag(tag_name, closed=True)
-
-        if close_border and prev_properties() is not None:
-            # At this stage we need to make sure that if there is an previously open tag
-            # about border we need to close it
-            yield HtmlTag(tag_name, closed=True)
-            self.current_border_item[item_name] = None
-
-        # All the inner items inside border tag are issued here
-        for result in results:
+        for result in self.border_and_shading_builder.export_borders(
+                paragraph, results, first_pass=self.first_pass):
             yield result
-
-        if current_properties() and last_item:
-            # If the item with border is the last one we need to make sure that we close the
-            # tag
-            yield HtmlTag(tag_name, closed=True)
-            self.current_border_item[item_name] = None
-
-    def get_borders_property(
-            self,
-            border_properties,
-            prev_border_properties,
-            shading_properties=None,
-            only_between=False):
-        attrs = {}
-        style = {}
-
-        if border_properties:
-            if only_between:
-                style.update(border_properties.get_between_border_style())
-            else:
-                style.update(border_properties.get_padding_style())
-                style.update(border_properties.get_shadow_style())
-
-                border_style = border_properties.get_border_style()
-
-                if prev_border_properties and \
-                        isinstance(prev_border_properties, wordprocessing.ParagraphBorders):
-
-                    cur_top = border_properties.top
-                    prev_bottom = prev_border_properties.bottom
-
-                    all_borders_defined = all([
-                        border_properties.borders_have_same_properties(),
-                        prev_border_properties.borders_have_same_properties()
-                    ])
-                    # We need to reset one border if adjacent identical borders are met
-                    if all_borders_defined and cur_top == prev_bottom:
-                        border_style['border-top'] = '0'
-                style.update(border_style)
-
-        if shading_properties and shading_properties.background_color:
-            style['background-color'] = '#{0}'.format(shading_properties.background_color)
-
-        if style:
-            attrs['style'] = convert_dictionary_to_style_fragment(style)
-
-        return attrs
 
     def export_paragraph_property_justification(self, paragraph, results):
         # TODO these classes could be applied on the paragraph, and not as
@@ -813,7 +548,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
         # Before starting new table new need to make sure that if there is any paragraph
         # with border opened before, we need to close it here.
-        for result in self.export_close_paragraph_border():
+        for result in self.border_and_shading_builder.export_close_paragraph_border():
             yield result
 
         tag = self.get_table_tag(table)
