@@ -49,7 +49,7 @@ class Paragraph(XmlModel):
                     first_child.name in ('_GoBack',):
                 return True
             # We can have cases when only run properties are defined and no text
-            elif not first_child.children:
+            elif not getattr(first_child, "children", None):
                 return True
         return False
 
