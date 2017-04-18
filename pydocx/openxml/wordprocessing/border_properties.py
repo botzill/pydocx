@@ -210,7 +210,7 @@ class ParagraphBorders(XmlModel, BaseBorderStyle):
 
     @classmethod
     def attributes_list(cls, obj):
-        if obj:
+        if obj is not None:
             return (obj.top,
                     obj.left,
                     obj.bottom,
@@ -222,6 +222,9 @@ class ParagraphBorders(XmlModel, BaseBorderStyle):
 
     def __ne__(self, other):
         return not self == other
+
+    def __nonzero__(self):
+        return any(self.attributes_list(self) or [None])
 
 
 class RunBorders(BaseBorder, BaseBorderStyle):

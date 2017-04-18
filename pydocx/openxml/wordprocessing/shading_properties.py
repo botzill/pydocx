@@ -30,7 +30,7 @@ class BaseShading(XmlModel):
 
     @classmethod
     def attributes_list(cls, obj):
-        if obj:
+        if obj is not None:
             return (obj.pattern,
                     obj.color,
                     obj.fill)
@@ -40,6 +40,9 @@ class BaseShading(XmlModel):
 
     def __ne__(self, other):
         return not self == other
+
+    def __nonzero__(self):
+        return any(self.attributes_list(self) or [None])
 
 
 class ParagraphShading(BaseShading):
