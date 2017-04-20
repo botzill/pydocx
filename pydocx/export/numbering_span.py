@@ -253,7 +253,7 @@ class BaseNumberingSpanBuilder(object):
 
         return item
 
-    def detect_parent_child_map_for_items(self):
+    def detect_parent_child_map_for_items(self, skip_bullets=True):
         """
         There are cases when we have span inside an item and this span is different from
         the parent one.
@@ -302,6 +302,19 @@ class BaseNumberingSpanBuilder(object):
 
         components_reversed_list = list(reversed(components))
         for i, component in enumerate(components[:-1]):
+            # TODO@geo This is a hack so solve a issue with one document.
+            # To properly implement lists I think we should not use ul/ol at all and instead
+            # mimic lists using tags like <p>, like:
+            # <p>1. Item 1</p>
+            # <p>2. Item 1</p>
+
+            # We only require to find the parent/child hierarchy for lists that have incremented numbers/letters
+            # such as: decimal, letter, roman
+            # For bullet we can skip this
+            if skip_bullets:
+                level = component.get_numbering_level()
+                if level and level.is_bullet_format():
+                    continue
             parent_item = self._get_component_item(component)
             nums = []
             outer_item_found = False

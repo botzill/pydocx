@@ -391,8 +391,8 @@ class DetectParentChildMapTestCase(NumberingSpanTestBase):
             if d1 != d2:
                 raise AssertionError("Dicts do not match: %s" % msg)
 
-    def create_container(self):
-        xml = '''
+    def create_container(self, xml=None):
+        default_xml = '''
             <numbering>
                 <abstractNum abstractNumId="1">
                     <lvl ilvl="0"></lvl>
@@ -437,6 +437,7 @@ class DetectParentChildMapTestCase(NumberingSpanTestBase):
             </numbering>
         '''
 
+        xml = xml or default_xml
         numbering = self._load_from_xml(xml)
 
         container = type(
@@ -450,7 +451,7 @@ class DetectParentChildMapTestCase(NumberingSpanTestBase):
 
         return container
 
-    def create_numbering_paragraph(self, num_id, level_id='0', container=True):
+    def create_numbering_paragraph(self, num_id, level_id='0', container=None, ):
         paragraph_params = {
             'properties': ParagraphProperties(
                 numbering_properties=NumberingProperties(
@@ -460,8 +461,10 @@ class DetectParentChildMapTestCase(NumberingSpanTestBase):
             )
         }
 
-        if container:
-            paragraph_params['container'] = self.create_container()
+        if container is None:
+            container = self.create_container()
+
+        paragraph_params['container'] = container
 
         return Paragraph(**paragraph_params)
 
@@ -751,6 +754,93 @@ class DetectParentChildMapTestCase(NumberingSpanTestBase):
         }
         child_item = {
             '2': {'num_id': '1', 'level': '0'},
+        }
+
+        self.assertDictEqual(builder.parent_child_num_map, parent_items)
+        self.assertDictEqual(builder.child_parent_num_map, child_item)
+        self.assertTrue(result)
+
+    def test_skip_bullets_listing_items(self):
+        xml = '''
+            <numbering>
+                <abstractNum abstractNumId="1">
+                    <lvl ilvl="0">
+                        <numFmt val="decimal"/>
+                    </lvl>
+                </abstractNum>
+                <num numId="1">
+                    <abstractNumId val="1" />
+                </num>
+                <abstractNum abstractNumId="2">
+                    <lvl ilvl="0">
+                        <numFmt val="decimal"/>
+                    </lvl>
+                </abstractNum>
+                <num numId="2">
+                    <abstractNumId val="2" />
+                </num>
+                <abstractNum abstractNumId="3">
+                    <lvl ilvl="0">
+                        <numFmt val="bullet"/>
+                    </lvl>
+                    <lvl ilvl="1">
+                        <numFmt val="bullet"/>
+                    </lvl>
+                </abstractNum>
+                <num numId="3">
+                    <abstractNumId val="3" />
+                </num>
+                <abstractNum abstractNumId="4">
+                    <lvl ilvl="0">
+                        <numFmt val="bullet"/>
+                    </lvl>
+                </abstractNum>
+                <num numId="4">
+                    <abstractNumId val="4" />
+                </num>
+                <abstractNum abstractNumId="5">
+                    <lvl ilvl="0">
+                        <numFmt val="bullet"/>
+                    </lvl>
+                </abstractNum>
+                <num numId="5">
+                    <abstractNumId val="5" />
+                </num>
+            </numbering>
+        '''
+
+        container = self.create_container(xml)
+        components = [
+            self.create_numbering_paragraph('1', '0', container=container),
+            self.create_numbering_paragraph('3', '0', container=container),
+            self.create_numbering_paragraph('3', '1', container=container),
+            self.create_numbering_paragraph('4', '0', container=container),
+            self.create_numbering_paragraph('3', '0', container=container),
+            self.create_numbering_paragraph('1', '0', container=container),
+            self.create_numbering_paragraph('2', '0', container=container),
+            self.create_numbering_paragraph('5', '0', container=container),
+            self.create_numbering_paragraph('2', '0', container=container),
+        ]
+
+        builder = NumberingSpanBuilder(components)
+        result = builder.detect_parent_child_map_for_items()
+
+        parent_items = {
+            ('1', '0'):
+                [
+                    {'num_id': '3', 'level': '0'},
+                    {'num_id': '3', 'level': '1'},
+                    {'num_id': '4', 'level': '0'},
+                ],
+            ('2', '0'):
+                [
+                    {'num_id': '5', 'level': '0'},
+                ]
+        }
+        child_item = {
+            '3': {'num_id': '1', 'level': '0'},
+            '4': {'num_id': '1', 'level': '0'},
+            '5': {'num_id': '2', 'level': '0'},
         }
 
         self.assertDictEqual(builder.parent_child_num_map, parent_items)
