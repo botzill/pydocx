@@ -467,6 +467,9 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
         level_ind_left = level_properties.to_int('indentation_left', default=0)
         level_ind_hanging = level_properties.to_int('indentation_hanging', default=0)
+        level_ind_first_line = level_properties.to_int('indentation_first_line', default=0)
+        # There are cases when hanging is not defined for level and instead is used firstLine
+        level_ind_hanging = level_ind_hanging or level_ind_first_line
 
         paragraph_ind_left = paragraph_properties.to_int('indentation_left', default=0)
         paragraph_ind_hanging = paragraph_properties.to_int('indentation_hanging', default=0)
