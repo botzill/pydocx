@@ -41,7 +41,7 @@ class AbstractNum(XmlModel):
             lvl1_ind = self.levels[1].paragraph_properties.to_int('indentation_left',
                                                                   default=0)
             ind_step = lvl1_ind - lvl0_ind
-        except IndexError:
+        except (IndexError, AttributeError):
             ind_step = DEFAULT_AUTOMATIC_TAB_STOP_INTERVAL  # default one
 
         return ind_step
