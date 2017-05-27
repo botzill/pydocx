@@ -732,6 +732,12 @@ class PyDocXHTMLExporter(PyDocXExporter):
         # the export underline function. There's got to be a better way.
         old = self.export_run_property_underline
         self.export_run_property_underline = lambda run, results: results
+
+        # Before starting new hyperlink we need to make sure that if there is any run
+        # with border opened before, we need to close it here.
+        for result in self.border_and_shading_builder.export_close_run_border():
+            yield result
+
         for result in results:
             yield result
         self.export_run_property_underline = old

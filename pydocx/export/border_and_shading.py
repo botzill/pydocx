@@ -275,5 +275,10 @@ class BorderAndShadingBuilder(NoBorderAndShadingBuilder):
 
     def export_close_paragraph_border(self):
         if self.current_border_item.get('Paragraph'):
-            yield HtmlTag('div', closed=True)
+            yield HtmlTag(self.TAGS['Paragraph'], closed=True)
             self.current_border_item['Paragraph'] = None
+
+    def export_close_run_border(self):
+        if self.current_border_item.get('Run'):
+            yield HtmlTag(self.TAGS['Run'], closed=True)
+            self.current_border_item['Run'] = None
