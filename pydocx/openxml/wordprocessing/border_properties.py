@@ -88,6 +88,11 @@ class BaseBorder(XmlModel):
     def __ne__(self, other):
         return not self == other
 
+    def __bool__(self):
+        if self.style and self.style in ['nil', 'none']:
+            return False
+        return True
+
 
 class TopBorder(BaseBorder):
     XML_TAG = 'top'
@@ -223,7 +228,7 @@ class ParagraphBorders(XmlModel, BaseBorderStyle):
     def __ne__(self, other):
         return not self == other
 
-    def __nonzero__(self):
+    def __bool__(self):
         return any(self.attributes_list(self) or [None])
 
 
