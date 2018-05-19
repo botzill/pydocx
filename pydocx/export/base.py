@@ -40,6 +40,7 @@ class PyDocXExporter(object):
             wordprocessing.Run: self.export_run,
             wordprocessing.Text: self.export_text,
             wordprocessing.Hyperlink: self.export_hyperlink,
+            wordprocessing.Bookmark: self.export_bookmark,
             wordprocessing.Break: self.export_break,
             wordprocessing.NoBreakHyphen: self.export_no_break_hyphen,
             wordprocessing.Table: self.export_table,
@@ -416,6 +417,9 @@ class PyDocXExporter(object):
         else:
             # TODO should we do this here, or in the HTML exporter?
             yield self.escape(text.text)
+
+    def export_bookmark(self, bookmark):
+        pass
 
     def export_deleted_text(self, deleted_text):
         pass

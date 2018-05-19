@@ -259,6 +259,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
             return
         if isinstance(paragraph.parent, NumberingItem):
             return
+
         return HtmlTag('p')
 
     def get_heading_tag(self, paragraph):
@@ -610,6 +611,17 @@ class PyDocXHTMLExporter(PyDocXExporter):
             yield result
         self.export_run_property_underline = old
 
+    def export_bookmark(self, bookmark):
+        results = super(PyDocXHTMLExporter, self).export_bookmark(bookmark)
+        attrs = {}
+
+        if bookmark.get_name():
+            attrs['id'] = bookmark.get_name()
+
+            tag = HtmlTag('a', **attrs)
+
+            return tag.apply(results, allow_empty=True)
+
     def get_break_tag(self, br):
         if br.is_page_break():
             tag_name = 'hr'
@@ -827,7 +839,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
         style = None
 
         if numbering_item.children:
-            level_properties = numbering_item.numbering_span.\
+            level_properties = numbering_item.numbering_span. \
                 numbering_level.paragraph_properties
             # get the first paragraph properties which will contain information
             # on how to properly indent listing item
@@ -835,9 +847,7 @@ class PyDocXHTMLExporter(PyDocXExporter):
 
             style = self.export_listing_paragraph_property_indentation(paragraph,
                                                                        level_properties)
-
         attrs = {}
-
         if style:
             attrs['style'] = convert_dictionary_to_style_fragment(style)
 
