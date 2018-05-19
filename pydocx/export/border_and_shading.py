@@ -196,7 +196,7 @@ class BorderAndShadingBuilder(NoBorderAndShadingBuilder):
                             else:
 
                                 add_between_border = prev_borders_properties.bottom != \
-                                                     border_between
+                                    border_between
 
                     if add_between_border:
                         # Render border between items
